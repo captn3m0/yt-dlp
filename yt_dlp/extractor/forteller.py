@@ -1,4 +1,5 @@
 from .common import InfoExtractor
+from urllib.parse import urlparse, parse_qs
 import json
 
 
@@ -42,6 +43,7 @@ class FortellerIE(InfoExtractor):
     This is needed to match the website URL
     against the API calls.
     """
+
     def _get_sku(self):
         sku = self.cache.load("forteller", f"sku/{self.narration_id}")
         if sku:
@@ -54,6 +56,7 @@ class FortellerIE(InfoExtractor):
     """
     Returns the complete catalog as a list of dicts
     """
+
     def _get_catalog(self):
         return self._call_api("catalog")
 
@@ -61,27 +64,80 @@ class FortellerIE(InfoExtractor):
     Returns a list of dicts with id, shortKey, name attributes
     for each of the chapters
     """
-    def _get_chapters(self, game_id):
+
+    def _get_all_chapters(self, game_id):
         return [
             {"id": row["id"], "shortKey": row["shortKey"], "name": row["name"]}
             for row in self._call_api("chapters", game_id)
         ]
 
-    def _call_api(self, endpoint, *items):
-        url = self._ENDPOINTS[endpoint].format(*items)
-        r = self.cache.load("forteller", f"api/{url}")
-        if r:
-            return r
-        r = self._download_json(
-            url,
-            None,
-            note=f"Downloading {endpoint} JSON metadata",
-            headers={
-                "Authorization": f"Bearer {self._TOKEN}",
-                "Forteller-Subscription-Key": self._SUBSCRIPTION_KEY,
+    def _get_chapters(self, game_id):
+        chapters = self._get_all_chapters(game_id)
+        u = urlparse(self.url)
+        q = parse_qs(u.query)
+        if "c" in q:
+            return [c for c in chapters if c["shortKey"] == q["c"][0]]
+        return chapters
+
+    _TESTS = [
+        {
+            "url": "https://www.fortellergames.com/narrations/cephalofair/jaws-of-the-lion?c=02",
+            "info_dict": {
+                "id": "329f4f74-f532-4180-84c5-7d2af0cf875f",
+                "_type": "playlist",
+                "title": "Jaws of the Lion",
             },
+            "playlist": [
+                {
+                    "info_dict": {
+                        "id": "30056026-c0f8-40a5-bf90-c7ec1f391c18",
+                        "title": "A Hole in the Wall - Introduction",
+                        "ext": "m4a",
+                        "track_number": 1,
+                        "album": "Jaws of the Lion",
+                        "track": "Introduction",
+                        "thumbnail": "https://forteller.azureedge.net/assets/games/329f4f74f532418084c57d2af0cf875f/store_card.png",
+                        "chapter_number": 1,
+                        "chapter": "A Hole in the Wall",
+                        "disc_number": 1,
+                        "genre": "AudioNarration",
+                        "composer": "Cephalofair",
+                        "chapter_id": "5a63a9e8-a2ed-4e3d-ac7c-866f16a0fa80",
+                        "album_artist": "Forteller Media",
+                        "artist": "Forteller Media",
+                    }
+                }
+            ],
+            "params": {
+                # m3u8 download
+                "skip_download": True,
+            },
+        }
+    ]
+
+    """
+    Calls a given endpoint with additional arguments
+    and authorization. Cache responses by default, since these
+    will rarely change.
+    """
+
+    def _call_api(self, endpoint, *items, cache=True):
+        url = self._ENDPOINTS[endpoint].format(*items)
+
+        if cache and (r := self.cache.load("forteller", f"api/{url}")):
+            return r
+
+        headers = {
+            "Authorization": f"Bearer {self._TOKEN}",
+            "Forteller-Subscription-Key": self._SUBSCRIPTION_KEY,
+        }
+        r = self._download_json(
+            url, None, note=f"Downloading {endpoint} JSON metadata", headers=headers
         )
-        self.cache.store("forteller", f"api/{url}", r)
+
+        if cache:
+            self.cache.store("forteller", f"api/{url}", r)
+
         return r
 
     def _get_playlist(self, game_id, chapter_id):
@@ -92,10 +148,11 @@ class FortellerIE(InfoExtractor):
         return [game for game in self._get_catalog() if game["sku"] == sku][0]
 
     def _get_stream_key(self, track_locator_id, playlist_id):
-        return self._call_api("stream-key", track_locator_id, playlist_id)["token"]
+        return self._call_api("stream-key", track_locator_id, playlist_id, cache=False)[
+            "token"
+        ]
 
     def _track_infodict(self, metadata, chapters):
-        info_tracks = []
         disc_number = 0
         for chapter in chapters:
             disc_number += 1
@@ -106,9 +163,13 @@ class FortellerIE(InfoExtractor):
                 yield {
                     "id": track["id"],
                     "formats": self._extract_m3u8_formats(
-                        f"{track['asset']['streamUrl']}(format=m3u8-aapl,encryption=cbc,type=audio)", track['id'], 'm4a',
-                        'm3u8_native', m3u8_id='hls'
+                        f"{track['asset']['streamUrl']}(format=m3u8-aapl,encryption=cbc,type=audio)",
+                        track["id"],
+                        "m4a",
+                        "m3u8_native",
+                        m3u8_id="hls",
                     ),
+                    "ext": "m4a",
                     "chapter": chapter["name"],
                     "chapter_id": playlist["id"],
                     "chapter_number": disc_number,
