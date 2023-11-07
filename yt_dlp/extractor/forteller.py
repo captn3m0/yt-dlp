@@ -14,7 +14,30 @@ class FortellerIE(InfoExtractor):
         "tracks": "https://api.forteller.io/catalog/games/{0}/containers/{1}/playlist",
         "stream-key": "https://api.forteller.io/media/streamkey/{0}?playlistId={1}",
     }
-    _VALID_URL = r"https?://(?:www\.)?fortellergames\.com/(?P<id>\w+)"
+    # offline sku mapping
+    _SKU_MAP = {
+      "jaws-of-the-lion": "ceph_jaws",
+      "gloomhaven": "ceph_gh",
+      "middara-act-1": "suc_mid1",
+      "frosthaven": "ceph_fh",
+      "sleeping-gods-and-tides-of-ruin": "raven_sgtor",
+      "forgotten-circles": "ceph_fc",
+      "the-isofarian-guard": "skg_iso",
+      "bardsung": "steam_bard",
+      "near-and-far": "raven_naf",
+      "detective-city-of-angels": "vrg_det",
+      "above-and-below": "raven_aab",
+      "now-or-never": "raven_non",
+      "chronicles-of-drunagor": "cgs_cod",
+      "kinfire-chronicles-nights-fall": "ids_nightsfall",
+      "bardsung-the-lost-levels": "steam_lost",
+      "deck-of-wonders": "furia_dow",
+      "detective-bullets-over-hollywood": "vrg_boh",
+      "detective-smoke-and-mirrors": "vrg_sam",
+      "dungeons-of-infinity": "skg_doi",
+      "sleeping-gods-distant-skies": "raven_distant"
+    }
+    _VALID_URL = r"https?://(?:www\.)?fortellergames\.com/products/(?P<id>[\w-]+)"
     _NETRC_MACHINE = "forteller"
     _TOKEN = None
 
@@ -37,21 +60,6 @@ class FortellerIE(InfoExtractor):
     def _real_initialize(self):
         if not self._TOKEN:
             self.raise_login_required(method="password")
-
-    """
-    Returns the SKU for the URL requested.
-    This is needed to match the website URL
-    against the API calls.
-    """
-
-    def _get_sku(self):
-        sku = self.cache.load("forteller", f"sku/{self.narration_id}")
-        if sku:
-            return sku
-        c = self._download_webpage(self.url, None, note="Downloading narration page")
-        sku = self._search_regex(r"sku&quot;:&quot;(?P<sku>\w+)&quot;", c, "sku")
-        self.cache.store("forteller", f"sku/{self.narration_id}", sku)
-        return sku
 
     """
     Returns the complete catalog as a list of dicts
@@ -81,7 +89,7 @@ class FortellerIE(InfoExtractor):
 
     _TESTS = [
         {
-            "url": "https://www.fortellergames.com/narrations/cephalofair/jaws-of-the-lion?c=02",
+            "url": "https://www.fortellergames.com/products/jaws-of-the-lion?c=02",
             "info_dict": {
                 "id": "329f4f74-f532-4180-84c5-7d2af0cf875f",
                 "_type": "playlist",
@@ -192,7 +200,7 @@ class FortellerIE(InfoExtractor):
     def _real_extract(self, url):
         self.url = url
         self.narration_id = self._match_id(url)
-        sku = self._get_sku()
+        sku = self._SKU_MAP[self.narration_id]
         metadata = self._find_sku_in_catalog(sku)
         chapters = self._get_chapters(metadata["id"])
 
