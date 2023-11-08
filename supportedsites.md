@@ -468,6 +468,7 @@
  - **FoodNetwork**
  - **FootyRoom**
  - **Formula1**
+ - **Forteller**: [*forteller*](## "netrc machine")
  - **FOX**
  - **FOX9**
  - **FOX9News**

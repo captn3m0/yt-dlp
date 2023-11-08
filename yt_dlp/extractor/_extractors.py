@@ -631,6 +631,7 @@ from .firsttv import FirstTVIE
 from .fivetv import FiveTVIE
 from .flickr import FlickrIE
 from .folketinget import FolketingetIE
+from .forteller import FortellerIE
 from .footyroom import FootyRoomIE
 from .formula1 import Formula1IE
 from .fourtube import (
